@@ -53,6 +53,12 @@ MESSAGE(STATUS "Generate the path header file to ${PATH_HEADER_DIR}")
 CONFIGURE_FILE(${PATH_HEADER_DIR}.in ${PATH_HEADER_DIR} @ONLY)
 
 ###############################################################################
+### Link with libraries                                                     ###
+###############################################################################
+FIND_PACKAGE(Eigen REQUIRED)
+INCLUDE_DIRECTORIES(${EIGEN_INCLUDE_DIR})
+
+###############################################################################
 ### Build source libraries                                                  ###
 ###############################################################################
 MESSAGE(STATUS "Prepare PROTOTYPE source")
