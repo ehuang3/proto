@@ -17,7 +17,7 @@ ENDIF(NOT CMAKE_BUILD_TYPE)
 ### Color gcc                                                               ###
 ###############################################################################
 IF(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_COMPILER_IS_GNUCPP)
-   OPTION(COLOR_GCC "Use GCCFilter to color compiler output messages" ON)
+   OPTION(COLOR_GCC "Use GCCFilter to color compiler output messages" OFF)
    SET(COLOR_GCC_OPTIONS "-c -r -w -n")
    IF(COLOR_GCC)
       SET_PROPERTY(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CMAKE_SOURCE_DIR}/tools/gccfilter ${COLOR_GCC_OPTIONS}")
@@ -57,6 +57,10 @@ CONFIGURE_FILE(${PATH_HEADER_DIR}.in ${PATH_HEADER_DIR} @ONLY)
 ###############################################################################
 FIND_PACKAGE(Eigen REQUIRED)
 INCLUDE_DIRECTORIES(${EIGEN_INCLUDE_DIR})
+
+SET(CURSES_NEED_NCURSES TRUE)
+FIND_PACKAGE(Curses REQUIRED)
+INCLUDE_DIRECTORIES(${CURSES_INCLUDE_DIR})
 
 ###############################################################################
 ### Build source libraries                                                  ###
