@@ -261,7 +261,12 @@ Code get_code(WINDOW* win, int height, const Code& prev) {
     }
 }
 
+class CLASS {
+	int c;
+};
+
 int main(int argc, char* argv[]) {
+
     int ch;
     WINDOW* win = initscr();
     start_color();
