@@ -1,11 +1,4 @@
-project(prototype)
-
-# Enable multi-threaded compilation.
-# We do this here and not in the root folder since the example apps
-# do not have enough source files to benefit from this.
-# if(MSVC)
-# 	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
-# endif()
+# project(prototype)
 
 # Setup directory structure
 set(SUBDIRS utils)
@@ -20,5 +13,5 @@ file(GLOB_RECURSE proto_hdrs *.h *.hpp)
 
 # Library
 add_library(proto ${proto_srcs} ${proto_hdrs})
-# target_link_libraries(proto ${DART_LIBRARIES} ${DARTExt_LIBRARIES})
+target_link_libraries(proto ${PROTO_LIBRARIES})
 set_target_properties(proto PROPERTIES LIBRARY_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/lib" ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_SOURCE_DIR}/lib")
