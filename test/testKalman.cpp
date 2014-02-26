@@ -5,6 +5,7 @@
 #include <gnuplot/gnuplot_i.hpp>
 
 using namespace std;
+// namespace Eigen { typedef Matrix<double,1,1> Vector1d; }
 
 /* ********************************************************************************************* */
 void wait_for_key () // Programm halts until keypress
@@ -84,6 +85,8 @@ Eigen::VectorXd GENERATE_LINEAR(double t, double dt, double v, double t0=0.0) {
 }
 /* ********************************************************************************************* */
 TEST(KALMAN, TEST_GNUPLOT) {
+	return;
+
 	try {
 		Gnuplot g1("lines");
 
@@ -186,56 +189,96 @@ TEST(KALMAN, TEST_1D) {
 	u_t(0) = 0.0;
 	z_t(0) = 6.0;
 
-	std::cout << "x_p: \n" << x_p << std::endl;
-	std::cout << "E_p: \n" << E_p << std::endl;
+	// std::cout << "x_p: \n" << x_p << std::endl;
+	// std::cout << "E_p: \n" << E_p << std::endl;
 
-	std::cout << "filter->update()" << std::endl;
+	// std::cout << "filter->update()" << std::endl;
 	filter->update(x_p, E_p, u_t, z_t);
 
-	std::cout << "x_p: \n" << x_p << std::endl;
-	std::cout << "E_p: \n" << E_p << std::endl;
+	// std::cout << "x_p: \n" << x_p << std::endl;
+	// std::cout << "E_p: \n" << E_p << std::endl;
 
 	u_t(0) = 10.0;
 	z_t(0) = 0.0;
 
-	std::cout << "filter->update()" << std::endl;
+	// std::cout << "filter->update()" << std::endl;
 	filter->update(x_p, E_p, u_t, z_t);
 
-	std::cout << "x_p: \n" << x_p << std::endl;
-	std::cout << "E_p: \n" << E_p << std::endl;
+	// std::cout << "x_p: \n" << x_p << std::endl;
+	// std::cout << "E_p: \n" << E_p << std::endl;
 
 	u_t(0) = 10.0;
 	z_t(0) = 0.0;
 
-	std::cout << "filter->update()" << std::endl;
+	// std::cout << "filter->update()" << std::endl;
 	filter->update(x_p, E_p, u_t, z_t);
 
-	std::cout << "x_p: \n" << x_p << std::endl;
-	std::cout << "E_p: \n" << E_p << std::endl;
+	// std::cout << "x_p: \n" << x_p << std::endl;
+	// std::cout << "E_p: \n" << E_p << std::endl;
 }
 /* ********************************************************************************************* */
 TEST(KALMAN, TEST_1D_LINEAR_VEL) {
+
 	double t = 5.0;
 	double dt = 0.1;
 	double v = 1;
 	int n = t/dt;
 
-	Eigen::VectorXd x(2,1);         // Mean and covariance at time t-1
-	Eigen::MatrixXd E(2,2);         // 
-	Eigen::VectorXd u_t(1), z_t(1); // Command and measurement at time t
-
 	KalmanFilter* filter = GENERATE_FILTER_1D_VEL(dt);
 
-	// initial conditions
-	x << 0, 0;
-	E << 1, 0, 0, 1;
+	Eigen::MatrixXd	R(2,2);     // Cov[A_t*x_t-1 + B_t*u_t]
+	Eigen::MatrixXd Q(1,1);     // Cov[del_t]
 
-	Eigen::VectorXd truth = GENERATE_LINEAR(t, dt, v);
-	Eigen::VectroXd x_t(2,n);
+	R << 
+		0.5, 0,
+		0, 0.5;
+	Q << 0.5;
 
+	filter->setTransitionCovariance(R);
+	filter->setMeasurementCovariance(Q);
 
+	std::vector<Eigen::VectorXd, Eigen::aligned_allocator<Eigen::VectorXd> > x;
+	std::vector<Eigen::MatrixXd, Eigen::aligned_allocator<Eigen::MatrixXd> > E;
+	x.push_back(Eigen::VectorXd::Zero(2,1));
+	E.push_back(Eigen::MatrixXd::Identity(2,2));
 
-	filter->update(x_p, E_p, u_t, z_t);
+	for(int i=0; i < x.size(); i++) {
+		std::cout << "x(" << i << "):\n" << x[i] << std::endl;
+		std::cout << "E(" << i << "):\n" << E[i] << std::endl;
+	}
+
+	Eigen::VectorXd motion = GENERATE_LINEAR(t, dt, v);
+
+	// ASSERT_EQ(motion.size(), x.size());
+
+	Eigen::VectorXd x_p, u_t;
+	Eigen::MatrixXd E_p;
+	Eigen::VectorXd z_t(1,1);
+
+	for(int i=1; i < n; i++) {
+		x.push_back(x[i-1]);    // x_t initialized to x_t-1
+		E.push_back(E[i-1]);    // likewise
+
+		u_t = Eigen::VectorXd::Zero(2,1);
+		z_t(0) = motion(i);
+
+		filter->update(x[i],E[i],u_t,z_t);
+	}
+
+	// Eigen::VectorXd x(2,1);         // Mean and covariance at time t-1
+	// Eigen::MatrixXd E(2,2);         // 
+	// Eigen::VectorXd u_t(1), z_t(1); // Command and measurement at time t
+
+	// KalmanFilter* filter = GENERATE_FILTER_1D_VEL(dt);
+
+	// // initial conditions
+	// x << 0, 0;
+	// E << 1, 0, 0, 1;
+
+	// Eigen::VectorXd truth = GENERATE_LINEAR(t, dt, v);
+	// Eigen::VectroXd x_t(2,n);
+
+	// filter->update(x_p, E_p, u_t, z_t);
 }
 /* ********************************************************************************************* */
 int main(int argc, char* argv[]) {

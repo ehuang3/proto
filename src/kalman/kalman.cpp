@@ -1,4 +1,5 @@
 #include <kalman/kalman.h>
+#include <assert.h>
 
 KalmanFilter::KalmanFilter()
 {
@@ -15,6 +16,16 @@ void KalmanFilter::setTransitionModel(const Eigen::MatrixXd& _A, const Eigen::Ma
     A = _A;
     B = _B;
     R = _R;
+}
+
+void KalmanFilter::setMeasurementCovariance(const Eigen::MatrixXd& _Q)
+{
+	Q = _Q;
+}
+
+void KalmanFilter::setTransitionCovariance(const Eigen::MatrixXd& _R)
+{
+	R = _R;
 }
 
 void KalmanFilter::getMeasurementModel(Eigen::MatrixXd& _C, Eigen::MatrixXd& _Q)
