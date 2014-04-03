@@ -1,5 +1,6 @@
 #pragma once
 #include <Eigen/Dense>
+#include <log4cxx/logger.h>
 
 class KalmanFilter
 {
@@ -17,6 +18,10 @@ public:
 
     void update(Eigen::VectorXd& u, Eigen::MatrixXd& E,
                 const Eigen::VectorXd& u_t, const Eigen::VectorXd& z_t);
+
+	friend std::ostream& operator<<(std::ostream& ostr, const KalmanFilter& filter);
+
+	static log4cxx::LoggerPtr logger;
 
 protected:
     Eigen::MatrixXd A, B, R, C, Q;

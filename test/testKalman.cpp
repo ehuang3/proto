@@ -1,8 +1,14 @@
 #include <iostream>
 #include <cmath>
 #include <gtest/gtest.h>
-#include <kalman/kalman.h>
 #include <gnuplot/gnuplot_i.hpp>
+#include <utils/ProtoPaths.h>
+#define EIGEN_DEFAULT_IO_FORMAT Eigen::IOFormat(Eigen::StreamPrecision, 0, ", ", "\n", "\t[", "]")
+#include <kalman/kalman.h>
+#include "log4cxx/basicconfigurator.h"
+#include <log4cxx/xml/domconfigurator.h>
+#include "log4cxx/helpers/exception.h"
+
 
 using namespace std;
 // namespace Eigen { typedef Matrix<double,1,1> Vector1d; }
@@ -51,8 +57,8 @@ static KalmanFilter* GENERATE_FILTER_1D_VEL(double dt) {
 	Eigen::MatrixXd Q(1,1);     // Cov[del_t]
 
 	A << 
-		1, 0,
-		0, dt;
+		1, dt,
+		0, 1;
 	B.setZero();
 	R << 
 		0.5, 0,
@@ -60,8 +66,8 @@ static KalmanFilter* GENERATE_FILTER_1D_VEL(double dt) {
 	C << 1, 0;
 	Q << 0.5;
 
-	filter_1D.setTransitionModel(A, B, R);
-	filter_1D.setMeasurementModel(C, Q);
+	filter_1D_vel.setTransitionModel(A, B, R);
+	filter_1D_vel.setMeasurementModel(C, Q);
 
 	return &filter_1D_vel;
 }
@@ -219,20 +225,23 @@ TEST(KALMAN, TEST_1D) {
 /* ********************************************************************************************* */
 TEST(KALMAN, TEST_1D_LINEAR_VEL) {
 
-	double t = 5.0;
+	// Initialize
+	double t = 1.0;
 	double dt = 0.1;
 	double v = 1;
 	int n = t/dt;
 
 	KalmanFilter* filter = GENERATE_FILTER_1D_VEL(dt);
 
+	std::cout << "1D FILTER = \n" << *filter << std::endl;
+
 	Eigen::MatrixXd	R(2,2);     // Cov[A_t*x_t-1 + B_t*u_t]
 	Eigen::MatrixXd Q(1,1);     // Cov[del_t]
 
 	R << 
-		0.5, 0,
-		0, 0.5;
-	Q << 0.5;
+		0.1, 0.,
+		0., 0.1;
+	Q << 0.00001;
 
 	filter->setTransitionCovariance(R);
 	filter->setMeasurementCovariance(Q);
@@ -249,40 +258,177 @@ TEST(KALMAN, TEST_1D_LINEAR_VEL) {
 
 	Eigen::VectorXd motion = GENERATE_LINEAR(t, dt, v);
 
-	// ASSERT_EQ(motion.size(), x.size());
-
+	// Run kalman filter loop
 	Eigen::VectorXd x_p, u_t;
 	Eigen::MatrixXd E_p;
 	Eigen::VectorXd z_t(1,1);
 
-	for(int i=1; i < n; i++) {
-		x.push_back(x[i-1]);    // x_t initialized to x_t-1
-		E.push_back(E[i-1]);    // likewise
+	std::vector<double> x_estimate, v_estimate, E_norm;
 
-		u_t = Eigen::VectorXd::Zero(2,1);
-		z_t(0) = motion(i);
+	double *data_ptr = motion.data();
+	std::vector<double> x_real(data_ptr, data_ptr + motion.size());
 
-		filter->update(x[i],E[i],u_t,z_t);
+	for(int i=0; i < n; i++) {
+		if(i >= 1) {
+			x.push_back(x[i-1]);    // x_t initialized to x_t-1
+			E.push_back(E[i-1]);    // likewise
+
+			u_t = Eigen::VectorXd::Zero(2,1);
+			z_t(0) = motion(i);
+
+			filter->update(x[i],E[i],u_t,z_t);
+		}
+		x_estimate.push_back(x[i](0));
+		v_estimate.push_back(x[i](1));
+		E_norm.push_back(E[i].norm());
 	}
 
-	// Eigen::VectorXd x(2,1);         // Mean and covariance at time t-1
-	// Eigen::MatrixXd E(2,2);         // 
-	// Eigen::VectorXd u_t(1), z_t(1); // Command and measurement at time t
+	LOG4CXX_INFO(KalmanFilter::logger, "1D Linear Vel = \n" << *filter);
 
-	// KalmanFilter* filter = GENERATE_FILTER_1D_VEL(dt);
+	// Plot
+	try {
+		Gnuplot g2;
+		g2.plot_x(x_estimate,"x estimate");
+		g2.plot_x(v_estimate,"v estimate");
+		g2.plot_x(x_real,"x real");
+		g2.set_smooth().plot_x(E_norm,"Cov norm");
+		// g2.set_smooth("bezier").plot_x(y2,"bezier");
+		// g2.unset_smooth();
+		g2.set_style("lines");
+		int tmp;
+		// std::cin >> tmp;
+	} catch (GnuplotException ge) {
+        cout << ge.what() << endl;
+    }
+}
+/* ********************************************************************************************* */
+TEST(KALMAN, TEST_VOLTAGE) {
+	KalmanFilter filter;
+	Eigen::MatrixXd A(1,1), B(1,1), R(1,1);
+	Eigen::MatrixXd C(1,1), Q(1,1);
 
-	// // initial conditions
-	// x << 0, 0;
-	// E << 1, 0, 0, 1;
+	A(0,0) = 1;                 // State model
+	B(0,0) = 0;                 // Command model
+	R(0,0) = 0.00001;           // Covariance of posterior state: A_t*x_t-1 + B_t*u_t
 
-	// Eigen::VectorXd truth = GENERATE_LINEAR(t, dt, v);
-	// Eigen::VectroXd x_t(2,n);
+	C(0,0) = 1;                 // Measurement model
+	Q(0,0) = 1;                 // Measurement noise model
 
-	// filter->update(x_p, E_p, u_t, z_t);
+	filter.setTransitionModel(A, B, R);
+	filter.setMeasurementModel(C, Q);
+
+	std::default_random_engine generator;
+	std::normal_distribution<double> distribution(5.0,1.0); // normal_distribution(mean, std)
+
+	std::vector<Eigen::VectorXd, Eigen::aligned_allocator<Eigen::VectorXd> > x;
+	std::vector<Eigen::MatrixXd, Eigen::aligned_allocator<Eigen::MatrixXd> > E;
+	x.push_back(Eigen::VectorXd::Zero(1,1));
+	E.push_back(Eigen::MatrixXd::Identity(1,1));
+	Eigen::VectorXd u_t = Eigen::VectorXd::Zero(1,1);
+	Eigen::VectorXd z_t = Eigen::VectorXd::Zero(1,1);
+	std::vector<double> x_est, E_est;
+	std::vector<double> x_real;
+	for(int i=0; i < 100; i++) {
+		if(i > 0) {
+			x.push_back(x[i-1]);    // x_t initialized to x_t-1
+			E.push_back(E[i-1]);    // likewise
+
+			z_t(0) = distribution(generator);
+
+			filter.update(x[i],E[i],u_t,z_t);
+		}
+		x_est.push_back(x[i](0));
+		E_est.push_back(E[i](0));
+		x_real.push_back(z_t(0));
+	}
+
+	try {
+		Gnuplot plot;
+		plot.set_smooth().plot_x(x_est, "x est");
+		plot.set_smooth().plot_x(x_real, "x real");
+		plot.set_smooth().plot_x(E_est, "E est");
+		// int tmp;
+		// std::cin >> tmp;
+	} catch (GnuplotException ge) {
+        cout << ge.what() << endl;
+    }
+}
+/* ********************************************************************************************* */
+TEST(KALMAN, TEST_2D_BALL) {
+	KalmanFilter filter;
+	Eigen::MatrixXd A(6,6), B(6,6), R(6,6);
+	Eigen::MatrixXd C(2,6), Q(2,2);
+
+	double dt = 0.1;
+	
+	A.setZero();
+	A.block<3,3>(0,0) <<
+		1, dt, 1/2*dt*dt,
+		0, 1, dt,
+		0, 0, 1;
+	A.block<3,3>(3,3) <<
+		1, dt, 1/2*dt*dt,
+		0, 1, dt,
+		0, 0, 1;
+	B.setZero();
+	R.setIdentity();
+
+	C.setZero();
+	C(0,0) = 1;
+	C(1,3) = 1;
+	Q.setZero();
+
+	// A(0,0) = 1;                 // State model
+	// B(0,0) = 0;                 // Command model
+	// R(0,0) = 0.00001;           // Covariance of posterior state: A_t*x_t-1 + B_t*u_t
+
+	// C(0,0) = 1;                 // Measurement model
+	// Q(0,0) = 1;                 // Measurement noise model
+
+	filter.setTransitionModel(A, B, R);
+	filter.setMeasurementModel(C, Q);
+
+	std::default_random_engine generator;
+	std::normal_distribution<double> distribution(5.0,1.0); // normal_distribution(mean, std)
+
+	std::vector<Eigen::VectorXd, Eigen::aligned_allocator<Eigen::VectorXd> > x;
+	std::vector<Eigen::MatrixXd, Eigen::aligned_allocator<Eigen::MatrixXd> > E;
+	x.push_back(Eigen::VectorXd::Zero(1,1));
+	E.push_back(Eigen::MatrixXd::Identity(1,1));
+	Eigen::VectorXd u_t = Eigen::VectorXd::Zero(1,1);
+	Eigen::VectorXd z_t = Eigen::VectorXd::Zero(1,1);
+	std::vector<double> x_est, E_est;
+	std::vector<double> x_real;
+	for(int i=0; i < 100; i++) {
+		if(i > 0) {
+			x.push_back(x[i-1]);    // x_t initialized to x_t-1
+			E.push_back(E[i-1]);    // likewise
+
+			z_t(0) = distribution(generator);
+
+			filter.update(x[i],E[i],u_t,z_t);
+		}
+		x_est.push_back(x[i](0));
+		E_est.push_back(E[i](0));
+		x_real.push_back(z_t(0));
+	}
+
+	try {
+		Gnuplot plot;
+		plot.set_smooth().plot_x(x_est, "x est");
+		plot.set_smooth().plot_x(x_real, "x real");
+		plot.set_smooth().plot_x(E_est, "E est");
+		// int tmp;
+		// std::cin >> tmp;
+	} catch (GnuplotException ge) {
+        cout << ge.what() << endl;
+    }
 }
 /* ********************************************************************************************* */
 int main(int argc, char* argv[]) {
     ::testing::InitGoogleTest(&argc, argv);
+	// ::log4cxx::BasicConfigurator::configure();
+	::log4cxx::xml::DOMConfigurator::configure(PROTO_ROOT_PATH "config/gtest.log4cxx.xml");
     return RUN_ALL_TESTS();
 }
 /* ********************************************************************************************* */
