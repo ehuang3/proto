@@ -69,7 +69,7 @@ void KalmanFilter::update(Eigen::VectorXd& x, Eigen::MatrixXd& E,
     x = x_ + K_t*(z_t - C*x_);
     LOG4CXX_TRACE(logger, "x_t = x_ + K_t(z_t - C*x_) = \n" << x);
 
-    E = (Eigen::MatrixXd::Identity(E.rows(), E.cols()) - K_t*C)*E;
+    E = (Eigen::MatrixXd::Identity(E.rows(), E.cols()) - K_t*C)*E_;
     LOG4CXX_TRACE(logger, "E_t = (I - K_t*C)E_ = \n" << E);
 }
 

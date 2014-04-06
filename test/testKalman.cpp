@@ -9,7 +9,6 @@
 #include <log4cxx/xml/domconfigurator.h>
 #include "log4cxx/helpers/exception.h"
 
-
 using namespace std;
 // namespace Eigen { typedef Matrix<double,1,1> Vector1d; }
 
@@ -355,71 +354,167 @@ TEST(KALMAN, TEST_VOLTAGE) {
 }
 /* ********************************************************************************************* */
 TEST(KALMAN, TEST_2D_BALL) {
+	log4cxx::LoggerPtr logger(log4cxx::Logger::getLogger("TEST_2D_BALL"));
+
 	KalmanFilter filter;
-	Eigen::MatrixXd A(6,6), B(6,6), R(6,6);
+	Eigen::MatrixXd A(6,6), B(6,2), R(6,6);
 	Eigen::MatrixXd C(2,6), Q(2,2);
 
-	double dt = 0.1;
+	double t = 1;
+	double dt = 0.016;
 	
-	A.setZero();
+	A.setZero();                // State model
 	A.block<3,3>(0,0) <<
-		1, dt, 1/2*dt*dt,
+		1, dt, 1./2.*dt*dt,
 		0, 1, dt,
 		0, 0, 1;
+		// 1, dt, 0,
+		// 0, 1, 0,
+		// 0, 0, 0;
 	A.block<3,3>(3,3) <<
-		1, dt, 1/2*dt*dt,
+		1, dt, 1./2.*dt*dt,
 		0, 1, dt,
 		0, 0, 1;
-	B.setZero();
-	R.setIdentity();
+		// 1, dt, 0,
+		// 0, 1, 0,
+		// 0, 0, 0;
+	B.setZero();                // Command model
+	// B.block<3,2>(0,0) <<
+	// 	1./2.*dt*dt, 0,
+	// 	dt, 0,
+	// 	1, 0;
+	// B.block<3,2>(3,0) <<
+	// 	0, 1./2.*dt*dt,
+	// 	0, dt,
+	// 	0, 1;
+	R.setIdentity();            // Covariance of posterior state: A_t*x_t-1 + B_t*u_t
+	R *= 0.000001;
+	R(0,0) = 0.0005;
+	R(3,3) = 0.0005;
+	// R.setZero();
 
-	C.setZero();
+	C.setZero();                // Measurement model
 	C(0,0) = 1;
 	C(1,3) = 1;
-	Q.setZero();
-
-	// A(0,0) = 1;                 // State model
-	// B(0,0) = 0;                 // Command model
-	// R(0,0) = 0.00001;           // Covariance of posterior state: A_t*x_t-1 + B_t*u_t
-
-	// C(0,0) = 1;                 // Measurement model
-	// Q(0,0) = 1;                 // Measurement noise model
+	Q.setZero();                // Measurement noise model
+	Q <<
+		0.01, 0,
+		0, 0.01;
 
 	filter.setTransitionModel(A, B, R);
 	filter.setMeasurementModel(C, Q);
 
+	B.block<3,2>(0,0) <<
+		1./2.*dt*dt, 0,
+		dt, 0,
+		1, 0;
+	B.block<3,2>(3,0) <<
+		0, 1./2.*dt*dt,
+		0, dt,
+		0, 1;
+
+	A.block<3,3>(0,0) <<
+		// 1, dt, 1./2.*dt*dt,
+		// 0, 1, dt,
+		// 0, 0, 1;
+		1, dt, 0,
+		0, 1, 0,
+		0, 0, 0;
+	A.block<3,3>(3,3) <<
+		// 1, dt, 1./2.*dt*dt,
+		// 0, 1, dt,
+		// 0, 0, 1;
+		1, dt, 0,
+		0, 1, 0,
+		0, 0, 0;
+
+	LOG4CXX_INFO(filter.logger, "2D Ball = \n" << filter);
+
 	std::default_random_engine generator;
-	std::normal_distribution<double> distribution(5.0,1.0); // normal_distribution(mean, std)
+	std::normal_distribution<double> distribution(0.0,1.0); // normal_distribution(mean, std)
+	Eigen::VectorXd w(6,1), q(2,1), w_t(6,1), q_t(2,1);
+	w << 0.005, 0.001, 0.001, 0.005, 0.001, 0.001;
+	// w << 0.00, 0.00, 0.00, 0.00, 0.00, 0.00;
+	q << 0.01, 0.01;
+	// q << 0.0, 0.0;
 
 	std::vector<Eigen::VectorXd, Eigen::aligned_allocator<Eigen::VectorXd> > x;
 	std::vector<Eigen::MatrixXd, Eigen::aligned_allocator<Eigen::MatrixXd> > E;
-	x.push_back(Eigen::VectorXd::Zero(1,1));
-	E.push_back(Eigen::MatrixXd::Identity(1,1));
-	Eigen::VectorXd u_t = Eigen::VectorXd::Zero(1,1);
-	Eigen::VectorXd z_t = Eigen::VectorXd::Zero(1,1);
-	std::vector<double> x_est, E_est;
-	std::vector<double> x_real;
-	for(int i=0; i < 100; i++) {
+	x.push_back(Eigen::VectorXd::Zero(6,1));
+	E.push_back(Eigen::MatrixXd::Identity(6,6));
+	Eigen::VectorXd x_t(6,1);
+	x_t << 2, -0.4, 0, 1, -0.4, 0; // x, dx, ddx, y, dy, ddy
+	Eigen::VectorXd u_t = Eigen::VectorXd::Zero(2,1);
+	Eigen::VectorXd z_t = Eigen::VectorXd::Zero(2,1);
+	std::vector<double> x_est, y_est, E_est;
+	std::vector<double> dx_est, dy_est;
+	std::vector<double> ddx_est, ddy_est;
+	std::vector<double> x_real, y_real;
+	std::vector<double> dx_real, dy_real;
+	std::vector<double> ddx_real, ddy_real;
+	for(int i=0; i < t/dt; i++) {
+
+		u_t(0) = 500*std::sin(8*M_PI*i*dt);
+		u_t(1) = 500*std::cos(8*M_PI*i*dt);
+		// u_t(0) = 1. - i/400.;
+		// u_t(1) = 1. - i/400.;
+		for(int i=0; i < w_t.size(); i++)
+			w_t(i) = w(i)*distribution(generator);
+		for(int i=0; i < q_t.size(); i++)
+			q_t(i) = q(i)*distribution(generator);
+
+		x_t = A*x_t + B*u_t + w_t;
+		z_t = C*x_t + q_t;
+
+		if(i == 0) {
+			x[i] = x_t;
+			x[i](0) = z_t(0);
+			x[i](3) = z_t(1);
+		}
+
 		if(i > 0) {
 			x.push_back(x[i-1]);    // x_t initialized to x_t-1
 			E.push_back(E[i-1]);    // likewise
 
-			z_t(0) = distribution(generator);
-
 			filter.update(x[i],E[i],u_t,z_t);
+
+			LOG4CXX_INFO(logger, "x_t real = \n" << x_t);
 		}
+
 		x_est.push_back(x[i](0));
-		E_est.push_back(E[i](0));
-		x_real.push_back(z_t(0));
+		y_est.push_back(x[i](3));
+		dx_est.push_back(x[i](1));
+		dy_est.push_back(x[i](4));
+		ddx_est.push_back(x[i](2));
+		ddy_est.push_back(x[i](5));
+		E_est.push_back(E[i].norm());
+		x_real.push_back(x_t(0));
+		y_real.push_back(x_t(3));
+		dx_real.push_back(x_t(1));
+		dy_real.push_back(x_t(4));
+		ddx_real.push_back(x_t(2));
+		ddy_real.push_back(x_t(5));
 	}
 
 	try {
-		Gnuplot plot;
-		plot.set_smooth().plot_x(x_est, "x est");
-		plot.set_smooth().plot_x(x_real, "x real");
-		plot.set_smooth().plot_x(E_est, "E est");
-		// int tmp;
-		// std::cin >> tmp;
+		Gnuplot x_plot;
+		x_plot.set_smooth().plot_x(x_est, "x est");
+		x_plot.set_smooth().plot_x(x_real, "x real");
+		x_plot.set_smooth().plot_x(dx_est, "dx est");
+		x_plot.set_smooth().plot_x(dx_real, "dx real");
+		x_plot.set_smooth().plot_x(ddx_est, "ddx est");
+		// x_plot.set_smooth().plot_x(ddx_real, "ddx real");
+
+		Gnuplot y_plot;		
+		y_plot.set_smooth().plot_x(y_est, "y est");
+		y_plot.set_smooth().plot_x(y_real, "y real");
+		y_plot.set_smooth().plot_x(dy_est, "dy est");
+		y_plot.set_smooth().plot_x(dy_real, "dy real");
+		y_plot.set_smooth().plot_x(ddy_est, "ddy est");
+		// y_plot.set_smooth().plot_x(ddy_real, "ddy real");
+		// y_plot.set_smooth().plot_x(E_est, "E est");
+		int tmp;
+		std::cin >> tmp;
 	} catch (GnuplotException ge) {
         cout << ge.what() << endl;
     }
